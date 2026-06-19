@@ -8,6 +8,7 @@ import (
 
 	"helm.sh/helm/v3/pkg/action"
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -75,6 +76,7 @@ func (r *AIWorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{Requeue: true}, r.Update(ctx, &w)
 	}
 
+	originalStatus := w.Status.DeepCopy()
 	result, err := r.reconcileStatus(ctx, &w)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -84,9 +86,11 @@ func (r *AIWorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	w.Status.ObservedGeneration = w.Generation
-	if err := r.Status().Update(ctx, &w); err != nil {
-		// The object may have been deleted by reconcileGitOpsStatus (HelmOp gone path).
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+	if !apiequality.Semantic.DeepEqual(originalStatus, &w.Status) {
+		if err := r.Status().Update(ctx, &w); err != nil {
+			// The object may have been deleted by reconcileGitOpsStatus (HelmOp gone path).
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
 	}
 
 	l.Info("reconciled AIWorkload", "phase", w.Status.Phase)

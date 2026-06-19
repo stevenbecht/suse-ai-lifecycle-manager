@@ -55,8 +55,7 @@ func (r *AIWorkloadReconciler) reconcileBlueprintStatus(ctx context.Context, w *
 	if len(w.Spec.FleetBundleNames) == 0 {
 		names := make([]string, 0, len(bp.Spec.Components))
 		for _, c := range bp.Spec.Components {
-			name := truncateName(w.Name+"-"+slugifyBP(c.ChartName), 63)
-			names = append(names, name)
+			names = append(names, blueprintBundleName(w, c.ChartName))
 		}
 		w.Spec.FleetBundleNames = names
 		if err := r.Update(ctx, w); err != nil {
@@ -583,9 +582,23 @@ func slugifyBP(s string) string {
 	return s
 }
 
-func truncateName(s string, max int) string {
-	if len(s) <= max {
-		return s
+func blueprintBundleName(w *aiplatformv1alpha1.AIWorkload, chartName string) string {
+	return capDNSLabelName(slugifyBP(w.Namespace+"-"+w.Name+"-"+chartName), 63)
+}
+
+func capDNSLabelName(name string, max int) string {
+	if len(name) <= max {
+		return name
 	}
-	return s[:max]
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(name))
+	suffix := strconv.FormatUint(uint64(h.Sum32()), 36)
+	if len(suffix) > helmHashLen {
+		suffix = suffix[:helmHashLen]
+	}
+	head := strings.Trim(name[:max-len(suffix)-1], "-")
+	if head == "" {
+		return suffix
+	}
+	return head + "-" + suffix
 }

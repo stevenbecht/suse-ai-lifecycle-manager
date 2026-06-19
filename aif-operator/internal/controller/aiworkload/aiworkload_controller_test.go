@@ -90,6 +90,29 @@ var _ = Describe("AIWorkload Controller", func() {
 			Expect(k8sClient.Get(ctx, req("test-gencounter", "default").NamespacedName, &got)).To(Succeed())
 			Expect(got.Status.ObservedGeneration).To(Equal(got.Generation))
 		})
+
+		It("does not write status when the derived status is unchanged", func() {
+			wl := helmWorkload("test-status-idempotent", "default")
+			Expect(k8sClient.Create(ctx, wl)).To(Succeed())
+			DeferCleanup(func() { _ = k8sClient.Delete(context.Background(), wl) })
+
+			r := reconciler()
+			// First reconcile adds finalizer; second reconcile writes initial status.
+			_, _ = r.Reconcile(ctx, req("test-status-idempotent", "default"))
+			_, err := r.Reconcile(ctx, req("test-status-idempotent", "default"))
+			Expect(err).NotTo(HaveOccurred())
+
+			var afterStatus aiplatformv1alpha1.AIWorkload
+			Expect(k8sClient.Get(ctx, req("test-status-idempotent", "default").NamespacedName, &afterStatus)).To(Succeed())
+			resourceVersion := afterStatus.ResourceVersion
+
+			_, err = r.Reconcile(ctx, req("test-status-idempotent", "default"))
+			Expect(err).NotTo(HaveOccurred())
+
+			var afterNoop aiplatformv1alpha1.AIWorkload
+			Expect(k8sClient.Get(ctx, req("test-status-idempotent", "default").NamespacedName, &afterNoop)).To(Succeed())
+			Expect(afterNoop.ResourceVersion).To(Equal(resourceVersion))
+		})
 	})
 
 	Context("derivePhase helper", func() {
@@ -375,9 +398,63 @@ var _ = Describe("Blueprint AIWorkload", func() {
 			var got aiplatformv1alpha1.AIWorkload
 			Expect(k8sClient.Get(ctx, req("bp-populate", "default").NamespacedName, &got)).To(Succeed())
 			Expect(got.Spec.FleetBundleNames).To(HaveLen(2))
-			Expect(got.Spec.FleetBundleNames[0]).To(Equal("bp-populate-ollama"))
-			Expect(got.Spec.FleetBundleNames[1]).To(Equal("bp-populate-qdrant"))
+			Expect(got.Spec.FleetBundleNames[0]).To(Equal("default-bp-populate-ollama"))
+			Expect(got.Spec.FleetBundleNames[1]).To(Equal("default-bp-populate-qdrant"))
 			Expect(got.Status.ObservedGeneration).To(BeZero())
+		})
+
+		It("scopes generated Fleet bundle names by workload namespace", func() {
+			bp := &aiplatformv1alpha1.Blueprint{
+				ObjectMeta: metav1.ObjectMeta{Name: "same-stack-1-0-0"},
+				Spec: aiplatformv1alpha1.BlueprintSpec{
+					DisplayName: "Same Stack",
+					Version:     "1.0.0",
+					Components: []aiplatformv1alpha1.BlueprintComponent{
+						{ChartRepo: "suse-ai", ChartName: "nginx", ChartVersion: "1.0.0"},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, bp)).To(Succeed())
+			DeferCleanup(func() { _ = k8sClient.Delete(context.Background(), bp) })
+
+			otherNS := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "other-ns"}}
+			_ = k8sClient.Create(ctx, otherNS)
+
+			newWorkload := func(ns string) *aiplatformv1alpha1.AIWorkload {
+				return &aiplatformv1alpha1.AIWorkload{
+					ObjectMeta: metav1.ObjectMeta{Name: "same", Namespace: ns},
+					Spec: aiplatformv1alpha1.AIWorkloadSpec{
+						DisplayName:     "Test",
+						DeployStrategy:  aiplatformv1alpha1.AIWorkloadDeployFleetBundle,
+						TargetNamespace: ns,
+						Source: aiplatformv1alpha1.AIWorkloadSource{
+							SourceType: aiplatformv1alpha1.AIWorkloadSourceBlueprint,
+							Blueprint:  &aiplatformv1alpha1.BlueprintSource{Name: "same-stack", Version: "1.0.0"},
+						},
+					},
+				}
+			}
+
+			defaultWorkload := newWorkload("default")
+			otherWorkload := newWorkload("other-ns")
+			Expect(k8sClient.Create(ctx, defaultWorkload)).To(Succeed())
+			Expect(k8sClient.Create(ctx, otherWorkload)).To(Succeed())
+			DeferCleanup(func() { _ = k8sClient.Delete(context.Background(), defaultWorkload) })
+			DeferCleanup(func() { _ = k8sClient.Delete(context.Background(), otherWorkload) })
+
+			r := reconciler()
+			_, _ = r.Reconcile(ctx, req("same", "default"))
+			_, err := r.Reconcile(ctx, req("same", "default"))
+			Expect(err).NotTo(HaveOccurred())
+			_, _ = r.Reconcile(ctx, req("same", "other-ns"))
+			_, err = r.Reconcile(ctx, req("same", "other-ns"))
+			Expect(err).NotTo(HaveOccurred())
+
+			var gotDefault, gotOther aiplatformv1alpha1.AIWorkload
+			Expect(k8sClient.Get(ctx, req("same", "default").NamespacedName, &gotDefault)).To(Succeed())
+			Expect(k8sClient.Get(ctx, req("same", "other-ns").NamespacedName, &gotOther)).To(Succeed())
+			Expect(gotDefault.Spec.FleetBundleNames).To(Equal([]string{"default-same-nginx"}))
+			Expect(gotOther.Spec.FleetBundleNames).To(Equal([]string{"other-ns-same-nginx"}))
 		})
 	})
 })
