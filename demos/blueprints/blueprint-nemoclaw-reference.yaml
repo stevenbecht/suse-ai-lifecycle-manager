@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nemoclaw-reference
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aiq-credentials
+  namespace: nemoclaw-reference
+type: Opaque
+stringData:
+  DB_USER_NAME: aiq
+  DB_USER_PASSWORD: aiq_dev
+  NVIDIA_API_KEY: replace-with-ngc-or-nvidia-api-key
+  TAVILY_API_KEY: replace-with-tavily-api-key
+---
+apiVersion: catalog.cattle.io/v1
+kind: ClusterRepo
+metadata:
+  name: nvidia-blueprint
+spec:
+  url: https://helm.ngc.nvidia.com/nvidia/blueprint
+---
+apiVersion: ai-platform.suse.com/v1alpha1
+kind: Blueprint
+metadata:
+  name: nemoclaw-reference-0-1-0
+  labels:
+    ai-platform.suse.com/blueprint-name: nemoclaw-reference
+    ai-platform.suse.com/blueprint-version: 0.1.0
+    ai-platform.suse.com/source: sample
+spec:
+  displayName: NemoClaw Reference
+  version: 0.1.0
+  description: Reference deployment using NVIDIA AI-Q WEB profile, the closest public NVIDIA blueprint chart currently available for NemoClaw-style agent workflows.
+  components:
+  - chartRepo: nvidia-blueprint
+    chartName: aiq2-web
+    chartVersion: 2.1.0
+    values:
+      aiq:
+        sharedSecrets:
+          enabled: true
+          autoMount: true
+          targetSecretName: aiq-credentials
+        apps:
+          backend:
+            imagePullSecrets:
+            - name: ngc-secret
+            ingress:
+              enabled: false
+          frontend:
+            imagePullSecrets:
+            - name: ngc-secret
+            ingress:
+              enabled: false
+---
+apiVersion: ai-platform.suse.com/v1alpha1
+kind: AIWorkload
+metadata:
+  name: nemoclaw-reference
+  namespace: nemoclaw-reference
+spec:
+  displayName: NemoClaw Reference
+  deployStrategy: FleetBundle
+  source:
+    sourceType: Blueprint
+    blueprint:
+      name: nemoclaw-reference
+      version: 0.1.0
+  targetNamespace: nemoclaw-reference
+  targetClusters:
+  - local

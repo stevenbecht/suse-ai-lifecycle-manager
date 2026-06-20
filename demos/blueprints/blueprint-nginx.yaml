@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nginx
+---
+apiVersion: catalog.cattle.io/v1
+kind: ClusterRepo
+metadata:
+  name: bitnami
+spec:
+  url: https://charts.bitnami.com/bitnami
+---
+apiVersion: ai-platform.suse.com/v1alpha1
+kind: Blueprint
+metadata:
+  name: nginx-0-1-0
+  labels:
+    ai-platform.suse.com/blueprint-name: nginx
+    ai-platform.suse.com/blueprint-version: 0.1.0
+    ai-platform.suse.com/source: sample
+spec:
+  displayName: NGINX
+  version: 0.1.0
+  description: Deploys an NGINX web server.
+  components:
+  - chartRepo: bitnami
+    chartName: nginx
+    chartVersion: 25.0.8
+    values:
+      replicaCount: 1
+      service:
+        type: ClusterIP
+      ingress:
+        enabled: false
+      metrics:
+        enabled: false
+      networkPolicy:
+        enabled: false
+      resourcesPreset: none
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 250m
+          memory: 128Mi
+---
+apiVersion: ai-platform.suse.com/v1alpha1
+kind: AIWorkload
+metadata:
+  name: nginx
+  namespace: nginx
+spec:
+  displayName: NGINX
+  deployStrategy: FleetBundle
+  source:
+    sourceType: Blueprint
+    blueprint:
+      name: nginx
+      version: 0.1.0
+  targetNamespace: nginx
+  targetClusters:
+  - local

@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: open-webui-ollama
+---
+apiVersion: catalog.cattle.io/v1
+kind: ClusterRepo
+metadata:
+  name: open-webui
+spec:
+  url: https://helm.openwebui.com
+---
+apiVersion: ai-platform.suse.com/v1alpha1
+kind: Blueprint
+metadata:
+  name: open-webui-ollama-0-1-0
+  labels:
+    ai-platform.suse.com/blueprint-name: open-webui-ollama
+    ai-platform.suse.com/blueprint-version: 0.1.0
+    ai-platform.suse.com/source: sample
+spec:
+  displayName: Open WebUI + Ollama
+  version: 0.1.0
+  description: Deploys Open WebUI with a local Ollama backend.
+  components:
+  - chartRepo: open-webui
+    chartName: open-webui
+    chartVersion: 14.8.0
+    values:
+      replicaCount: 1
+      ingress:
+        enabled: false
+      ollama:
+        enabled: true
+        fullnameOverride: open-webui-ollama-ollama
+        ollama:
+          gpu:
+            enabled: false
+          models:
+            pull: []
+            run: []
+        persistentVolume:
+          enabled: false
+      ollamaUrls: []
+      ollamaUrlsFromExtraEnv: false
+      pipelines:
+        enabled: false
+      persistence:
+        enabled: false
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          cpu: "1"
+          memory: 2Gi
+      service:
+        port: 80
+        type: ClusterIP
+      websocket:
+        enabled: false
+---
+apiVersion: ai-platform.suse.com/v1alpha1
+kind: AIWorkload
+metadata:
+  name: open-webui-ollama
+  namespace: open-webui-ollama
+spec:
+  displayName: Open WebUI + Ollama
+  deployStrategy: FleetBundle
+  source:
+    sourceType: Blueprint
+    blueprint:
+      name: open-webui-ollama
+      version: 0.1.0
+  targetNamespace: open-webui-ollama
+  targetClusters:
+  - local
