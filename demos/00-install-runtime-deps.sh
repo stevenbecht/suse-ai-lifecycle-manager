@@ -8,6 +8,44 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 K3S_SELINUX_RPM_URL="${K3S_SELINUX_RPM_URL:-https://rpm.rancher.io/k3s/stable/common/microos/noarch/k3s-selinux-1.6-1.sle.noarch.rpm}"
 K3S_SELINUX_RPM_PATH="${K3S_SELINUX_RPM_PATH:-${SCRIPT_DIR}/$(basename "${K3S_SELINUX_RPM_URL}")}"
 
+check_tls() {
+  local domain="$1"
+
+  if ! command -v curl >/dev/null 2>&1; then
+    return
+  fi
+
+  local curl_output=""
+  if curl_output="$(curl -sSI --connect-timeout 10 --max-time 20 "https://${domain}/" 2>&1 >/dev/null)"; then
+    return
+  fi
+
+  log "warning: could not verify the TLS certificate for ${domain}"
+  log "warning: DNS may be resolving ${domain} through an internal search domain such as ${domain}.<domain>"
+  log "warning: ask a maintainer for help before continuing"
+  if [[ -n "${curl_output}" ]]; then
+    log "warning: curl output: ${curl_output//$'\n'/ }"
+  fi
+}
+
+TLS_CHECK_DOMAINS=(
+  ghcr.io
+)
+
+for domain in "${TLS_CHECK_DOMAINS[@]}"; do
+  check_tls "${domain}"
+done
+
+install_helm() {
+  if command -v helm >/dev/null 2>&1; then
+    log "helm is already installed"
+    return
+  fi
+
+  log "installing demo dependency: helm"
+  sudo zypper --non-interactive install -y helm
+}
+
 os_id=""
 os_like=""
 os_pretty="unknown OS"
@@ -30,6 +68,8 @@ esac
 
 need sudo
 need zypper
+
+install_helm
 
 if [[ "${INSTALL_RUNTIME}" == "rke2" ]]; then
   log "installing SUSE RKE2 dependency: apparmor-parser"
