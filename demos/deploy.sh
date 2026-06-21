@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+STEPS_DIR="${SCRIPT_DIR}/scripts"
 
 steps=(
   "00-install-runtime-deps.sh"
@@ -12,6 +13,6 @@ steps=(
 )
 
 for step in "${steps[@]}"; do
-  printf '>>> running %s\n' "${step}"
-  "${SCRIPT_DIR}/${step}"
+  printf '>>> running scripts/%s\n' "${step}"
+  "${STEPS_DIR}/${step}"
 done

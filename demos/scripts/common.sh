@@ -82,13 +82,13 @@ find_k3s() {
 unalias kubectl 2>/dev/null || true
 kubectl() {
   if [[ "${INSTALL_RUNTIME}" == "rke2" ]]; then
-    [[ -x "${RKE2_KUBECTL_BIN}" ]] || die "missing RKE2 kubectl at ${RKE2_KUBECTL_BIN}; run 01-install-runtime.sh first"
+    [[ -x "${RKE2_KUBECTL_BIN}" ]] || die "missing RKE2 kubectl at ${RKE2_KUBECTL_BIN}; run demos/scripts/01-install-runtime.sh first"
     "${RKE2_KUBECTL_BIN}" "$@"
     return
   fi
 
   local k3s_bin=""
   k3s_bin="$(find_k3s || true)"
-  [[ -n "${k3s_bin}" ]] || die "missing k3s; run 01-install-runtime.sh first or set K3S_BIN=/path/to/k3s"
+  [[ -n "${k3s_bin}" ]] || die "missing k3s; run demos/scripts/01-install-runtime.sh first or set K3S_BIN=/path/to/k3s"
   "${k3s_bin}" kubectl "$@"
 }
