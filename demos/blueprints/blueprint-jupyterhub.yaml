@@ -1,0 +1,98 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jupyterhub
+---
+apiVersion: catalog.cattle.io/v1
+kind: ClusterRepo
+metadata:
+  name: jupyterhub
+spec:
+  url: https://hub.jupyter.org/helm-chart/
+---
+apiVersion: ai-platform.suse.com/v1alpha1
+kind: Blueprint
+metadata:
+  name: jupyterhub-0-1-0
+  labels:
+    ai-platform.suse.com/blueprint-name: jupyterhub
+    ai-platform.suse.com/blueprint-version: 0.1.0
+    ai-platform.suse.com/source: sample
+spec:
+  displayName: JupyterHub
+  version: 0.1.0
+  description: Deploys a lightweight JupyterHub for interactive notebook demos.
+  components:
+  - chartRepo: jupyterhub
+    chartName: jupyterhub
+    chartVersion: 4.4.0
+    values:
+      hub:
+        config:
+          Authenticator:
+            allow_all: true
+          JupyterHub:
+            admin_access: true
+            authenticator_class: shared-password
+          SharedPasswordAuthenticator:
+            user_password: password
+        db:
+          type: sqlite-memory
+        networkPolicy:
+          enabled: false
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+      proxy:
+        chp:
+          networkPolicy:
+            enabled: false
+        https:
+          enabled: false
+        service:
+          type: ClusterIP
+        traefik:
+          networkPolicy:
+            enabled: false
+      singleuser:
+        cpu:
+          guarantee: 0.1
+          limit: 1
+        memory:
+          guarantee: 512M
+          limit: 2G
+        networkPolicy:
+          enabled: false
+        storage:
+          type: none
+      prePuller:
+        hook:
+          enabled: false
+        continuous:
+          enabled: false
+      scheduling:
+        userScheduler:
+          enabled: false
+        userPlaceholder:
+          enabled: false
+---
+apiVersion: ai-platform.suse.com/v1alpha1
+kind: AIWorkload
+metadata:
+  name: jupyterhub
+  namespace: jupyterhub
+spec:
+  displayName: JupyterHub
+  deployStrategy: FleetBundle
+  source:
+    sourceType: Blueprint
+    blueprint:
+      name: jupyterhub
+      version: 0.1.0
+  targetNamespace: jupyterhub
+  targetClusters:
+  - local
